@@ -1,0 +1,56 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: sovereign-ollama
+    networks:
+      - airgapped
+    volumes:
+      - ${OLLAMA_DATA:-~/.ollama}:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sovereign-backend
+    networks:
+      - airgapped
+      - hostaccess
+    depends_on:
+      - ollama
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+      - MODEL_NAME=${MODEL_NAME:-qwen2.5:7b}
+    volumes:
+      - ./backend/storage:/app/backend/storage
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: sovereign-frontend
+    networks:
+      - hostaccess
+    depends_on:
+      - backend
+    ports:
+      - "5173:80"
+    restart: unless-stopped
+
+networks:
+  airgapped:
+    driver: bridge
+    internal: true
+
+  hostaccess:
+    driver: bridge
